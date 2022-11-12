@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -21,12 +22,23 @@ import (
 // + modularity
 // + error wrapping/unwrapping
 
-var srcName = "sample.mp3"
-var dstName = "sample-result.mp3"
+type cmdlineOptions struct {
+	src string
+	dst string
+}
+
+var options cmdlineOptions
+
+func init() {
+	flag.StringVar(&options.src, "src", "", "source file name")
+	flag.StringVar(&options.dst, "dst", "", "destination file name")
+}
 
 func main() {
 	zerolog.SetGlobalLevel(zerolog.DebugLevel)
 	log.Logger = zerolog.New(zerolog.ConsoleWriter{Out: os.Stdout}).With().Timestamp().Logger()
+
+	flag.Parse()
 
 	tmpFile, err := os.CreateTemp("", "tmp*.mp3")
 	if err != nil {
@@ -46,17 +58,17 @@ func main() {
 	}()
 
 	// fail early
-	dstExists, err := fileExists(dstName)
+	dstExists, err := fileExists(options.dst)
 	if err != nil {
 		log.Error().Msgf("error accessing destination file: %s", err)
 		return
 	}
 	if dstExists {
-		log.Error().Msgf("destination file %s already exists\n", dstName)
+		log.Error().Msgf("destination file %s already exists\n", options.dst)
 		return
 	}
 
-	err = copyFileContents(srcName, tmpName)
+	err = copyFileContents(options.src, tmpName)
 	if err != nil {
 		log.Error().Msgf("Error copying to temp file: %s", err)
 		return
@@ -98,7 +110,7 @@ func main() {
 		return
 	}
 
-	err = copyFile(tmpName, dstName)
+	err = copyFile(tmpName, options.dst)
 	if err != nil {
 		log.Error().Msgf("Error creating output file: %s", err)
 		return
@@ -180,7 +192,7 @@ func formatBytes(arr []byte) string {
 }
 
 func fileExists(name string) (bool, error) {
-	_, err := os.Stat(dstName)
+	_, err := os.Stat(name)
 	if err == nil {
 		// file apparently exists
 		return true, nil
