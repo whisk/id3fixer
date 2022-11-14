@@ -22,16 +22,22 @@ import (
 // + modularity
 // + error wrapping/unwrapping
 
-type cmdlineOptions struct {
-	src string
-	dst string
+type optionsType struct {
+	src       string
+	dst       string
+	fixTitle  bool
+	fixArtist bool
+	fixAlbum  bool
 }
 
-var options cmdlineOptions
+var options optionsType
 
 func init() {
 	flag.StringVar(&options.src, "src", "", "source file name")
 	flag.StringVar(&options.dst, "dst", "", "destination file name")
+	flag.BoolVar(&options.fixTitle, "fix-title", true, "fix title")
+	flag.BoolVar(&options.fixArtist, "fix-artist", true, "fix artist")
+	flag.BoolVar(&options.fixAlbum, "fix-album", true, "fix album")
 }
 
 func main() {
@@ -39,6 +45,11 @@ func main() {
 	log.Logger = zerolog.New(zerolog.ConsoleWriter{Out: os.Stdout}).With().Timestamp().Logger()
 
 	flag.Parse()
+
+	if !options.fixTitle && !options.fixArtist && !options.fixAlbum {
+		log.Error().Msg("Noting to fix!")
+		return
+	}
 
 	tmpFile, err := os.CreateTemp("", "tmp*.mp3")
 	if err != nil {
@@ -81,28 +92,38 @@ func main() {
 	}
 	defer tag.Close()
 
+	tag.SetDefaultEncoding(id3v2.EncodingUTF8)
+
 	title := tag.Title()
 	artist := tag.Artist()
 	album := tag.Album()
+
 	log.Debug().Msgf("Raw title: '%s', raw artist: '%s'", title, artist)
-	fixedTitle, err := fixEncoding(title)
-	if err != nil {
-		log.Error().Msgf("Error converting title: %s", err)
-	}
-	fixedArtist, err := fixEncoding(artist)
-	if err != nil {
-		log.Error().Msgf("Error converting title: %s", err)
-	}
-	fixedAlbum, err := fixEncoding(album)
-	if err != nil {
-		log.Error().Msgf("Error converting album: %s", err)
+	if options.fixTitle {
+		title, err = fixEncoding(title)
+		if err != nil {
+			log.Error().Msgf("Error converting title: %s", err)
+		}
+		tag.SetTitle(title)
 	}
 
-	log.Info().Msgf("Fixed title: '%s', fixed artist: '%s'", fixedTitle, fixedArtist)
-	tag.SetDefaultEncoding(id3v2.EncodingUTF8)
-	tag.SetTitle(fixedTitle)
-	tag.SetArtist(fixedArtist)
-	tag.SetAlbum(fixedAlbum)
+	if options.fixArtist {
+		artist, err = fixEncoding(artist)
+		if err != nil {
+			log.Error().Msgf("Error converting artist: %s", err)
+		}
+		tag.SetArtist(artist)
+	}
+
+	if options.fixAlbum {
+		album, err = fixEncoding(album)
+		if err != nil {
+			log.Error().Msgf("Error converting album: %s", err)
+		}
+		tag.SetAlbum(album)
+	}
+
+	log.Info().Msgf("Fixed title: '%s', fixed artist: '%s', fixed album: '%s'", title, artist, album)
 
 	err = tag.Save()
 	if err != nil {
