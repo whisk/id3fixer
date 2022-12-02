@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"os"
 
@@ -33,7 +34,11 @@ func main() {
 
 	err := fixMp3(options.src, options.dst, options.fixTitle, options.fixArtist, options.fixAlbum)
 	if err != nil {
-		log.Error().Msg(err.Error())
+		log.Error().Err(err).Msg("")
+		// for debug purposes
+		if unwrapped := errors.Unwrap(err); unwrapped != nil {
+			log.Error().Err(unwrapped).Msg("Unwrapped error")
+		}
 		os.Exit(1)
 	}
 }

@@ -10,12 +10,12 @@ import (
 
 func fixMp3(src, dst string, fixTitle, fixArtist, fixAlbum bool) error {
 	if !fixTitle && !fixArtist && !fixAlbum {
-		return fmt.Errorf("Noting to fix!")
+		return fmt.Errorf("Nothing to fix!")
 	}
 
 	tmpFile, err := os.CreateTemp("", "tmp*.mp3")
 	if err != nil {
-		return fmt.Errorf("Error creating temp file: %s", err)
+		return fmt.Errorf("Error creating temp file: %w", err)
 	}
 	tmpName := tmpFile.Name()
 	defer func() {
@@ -32,7 +32,7 @@ func fixMp3(src, dst string, fixTitle, fixArtist, fixAlbum bool) error {
 	// fail early
 	dstExists, err := fileExists(dst)
 	if err != nil {
-		return fmt.Errorf("error accessing destination file: %s", err)
+		return fmt.Errorf("error accessing destination file: %w", err)
 	}
 	if dstExists {
 		return fmt.Errorf("destination file %s already exists\n", dst)
@@ -40,12 +40,12 @@ func fixMp3(src, dst string, fixTitle, fixArtist, fixAlbum bool) error {
 
 	err = copyFileContents(src, tmpName)
 	if err != nil {
-		return fmt.Errorf("Error copying to temp file: %s", err)
+		return fmt.Errorf("Error copying to temp file: %w", err)
 	}
 
 	tag, err := id3v2.Open(tmpName, id3v2.Options{Parse: true})
 	if err != nil {
-		return fmt.Errorf("Failed to read mp3 file: %s", err)
+		return fmt.Errorf("Failed to read mp3 file: %w", err)
 	}
 	defer tag.Close()
 
@@ -84,12 +84,12 @@ func fixMp3(src, dst string, fixTitle, fixArtist, fixAlbum bool) error {
 
 	err = tag.Save()
 	if err != nil {
-		return fmt.Errorf("Error saving temp file: %s", err)
+		return fmt.Errorf("Error saving temp file: %w", err)
 	}
 
 	err = copyFile(tmpName, dst)
 	if err != nil {
-		return fmt.Errorf("Error creating output file: %s", err)
+		return fmt.Errorf("Error creating output file: %w", err)
 	}
 
 	return nil
