@@ -17,6 +17,7 @@ import (
 // + push to github
 // + modularity
 // + error wrapping/unwrapping
+// + fix in-place (with backups)
 
 type optionsType struct {
 	src       string

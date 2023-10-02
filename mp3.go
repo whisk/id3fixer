@@ -12,6 +12,10 @@ func fixMp3(src, dst string, fixTitle, fixArtist, fixAlbum bool) error {
 	if !fixTitle && !fixArtist && !fixAlbum {
 		return fmt.Errorf("Nothing to fix!")
 	}
+	// fail early
+	if ok, _ := fileExists(src); !ok {
+		return fmt.Errorf("%s does not exists", src)
+	}
 
 	tmpFile, err := os.CreateTemp("", "tmp*.mp3")
 	if err != nil {
@@ -29,13 +33,15 @@ func fixMp3(src, dst string, fixTitle, fixArtist, fixAlbum bool) error {
 		}
 	}()
 
-	// fail early
-	dstExists, err := fileExists(dst)
-	if err != nil {
-		return fmt.Errorf("error accessing destination file: %w", err)
-	}
-	if dstExists {
-		return fmt.Errorf("destination file %s already exists\n", dst)
+	if dst != "" {
+		// fail early
+		dstExists, err := fileExists(dst)
+		if err != nil {
+			return fmt.Errorf("error accessing destination file: %w", err)
+		}
+		if dstExists {
+			return fmt.Errorf("destination file %s already exists\n", dst)
+		}
 	}
 
 	err = copyFileContents(src, tmpName)
@@ -56,10 +62,12 @@ func fixMp3(src, dst string, fixTitle, fixArtist, fixAlbum bool) error {
 	album := tag.Album()
 
 	log.Debug().Msgf("Raw title: '%s', raw artist: '%s'", title, artist)
+	errorsCount := 0
 	if fixTitle {
 		title, err = fixEncoding(title)
 		if err != nil {
 			log.Error().Msgf("Error converting title: %s", err)
+			errorsCount += 1
 		}
 		tag.SetTitle(title)
 	}
@@ -68,6 +76,7 @@ func fixMp3(src, dst string, fixTitle, fixArtist, fixAlbum bool) error {
 		artist, err = fixEncoding(artist)
 		if err != nil {
 			log.Error().Msgf("Error converting artist: %s", err)
+			errorsCount += 1
 		}
 		tag.SetArtist(artist)
 	}
@@ -76,20 +85,36 @@ func fixMp3(src, dst string, fixTitle, fixArtist, fixAlbum bool) error {
 		album, err = fixEncoding(album)
 		if err != nil {
 			log.Error().Msgf("Error converting album: %s", err)
+			errorsCount += 1
 		}
 		tag.SetAlbum(album)
 	}
 
 	log.Info().Msgf("Fixed title: '%s', fixed artist: '%s', fixed album: '%s'", title, artist, album)
+	if errorsCount > 0 {
+		return fmt.Errorf("Got errors while fixing encoding, aborting")
+	}
 
 	err = tag.Save()
 	if err != nil {
 		return fmt.Errorf("Error saving temp file: %w", err)
 	}
 
-	err = copyFile(tmpName, dst)
-	if err != nil {
-		return fmt.Errorf("Error creating output file: %w", err)
+	if dst != "-" {
+		err = copyFileSafe(tmpName, dst)
+		if err != nil {
+			return fmt.Errorf("Error creating output file: %w", err)
+		}
+	} else {
+		// fix in-place
+		err = copyFileContents(src, src+".bak") // always make backups!
+		if err != nil {
+			return fmt.Errorf("Error creating a backup: %w", err)
+		}
+		err = copyFileContents(tmpName, src)
+		if err != nil {
+			return fmt.Errorf("Error fixing in-place: %w", err)
+		}
 	}
 
 	return nil

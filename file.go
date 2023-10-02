@@ -8,15 +8,8 @@ import (
 )
 
 // see https://stackoverflow.com/questions/21060945/simple-way-to-copy-a-file
-func copyFile(src, dst string) (err error) {
-	// check source file
-	srcStat, err := os.Stat(src)
-	if err != nil {
-		return
-	}
-	if !srcStat.Mode().IsRegular() {
-		return fmt.Errorf("non-regular source file %s", src)
-	}
+// safely copy file with checks that destination does not exists
+func copyFileSafe(src, dst string) (err error) {
 	dstExists, _ := fileExists(dst)
 	if dstExists {
 		return fmt.Errorf("destination file %s already exists", dst)
@@ -27,6 +20,15 @@ func copyFile(src, dst string) (err error) {
 }
 
 func copyFileContents(src, dst string) (err error) {
+	// check source file
+	srcStat, err := os.Stat(src)
+	if err != nil {
+		return
+	}
+	if !srcStat.Mode().IsRegular() {
+		return fmt.Errorf("non-regular source file %s", src)
+	}
+
 	srcFile, err := os.Open(src)
 	if err != nil {
 		return
