@@ -18,13 +18,16 @@ import (
 // + modularity
 // + error wrapping/unwrapping
 // + fix in-place (with backups)
+// + support fixing comments
+// - write readme
 
 type optionsType struct {
-	src       string
-	dst       string
-	fixTitle  bool
-	fixArtist bool
-	fixAlbum  bool
+	src         string
+	dst         string
+	fixTitle    bool
+	fixArtist   bool
+	fixAlbum    bool
+	fixComments bool
 }
 
 func main() {
@@ -33,7 +36,7 @@ func main() {
 
 	options := parseCmdlineOptions()
 
-	err := fixMp3(options.src, options.dst, options.fixTitle, options.fixArtist, options.fixAlbum)
+	err := fixMp3(options.src, options.dst, options.fixTitle, options.fixArtist, options.fixAlbum, options.fixComments)
 	if err != nil {
 		log.Error().Err(err).Msg("")
 		// for debug purposes
@@ -51,6 +54,7 @@ func parseCmdlineOptions() optionsType {
 	flag.BoolVar(&options.fixTitle, "fix-title", true, "fix title")
 	flag.BoolVar(&options.fixArtist, "fix-artist", true, "fix artist")
 	flag.BoolVar(&options.fixAlbum, "fix-album", true, "fix album")
+	flag.BoolVar(&options.fixComments, "fix-comments", true, "fix comments")
 
 	flag.Parse()
 

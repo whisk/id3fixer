@@ -8,8 +8,8 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-func fixMp3(src, dst string, fixTitle, fixArtist, fixAlbum bool) error {
-	if !fixTitle && !fixArtist && !fixAlbum {
+func fixMp3(src, dst string, fixTitle, fixArtist, fixAlbum, fixComments bool) error {
+	if !fixTitle && !fixArtist && !fixAlbum && !fixComments {
 		return fmt.Errorf("Nothing to fix!")
 	}
 	// fail early
@@ -88,6 +88,37 @@ func fixMp3(src, dst string, fixTitle, fixArtist, fixAlbum bool) error {
 			errorsCount += 1
 		}
 		tag.SetAlbum(album)
+	}
+
+	if fixComments {
+		framesMap := tag.AllFrames()
+		comments, ok := framesMap[tag.CommonID("Comments")]
+		fixedComments := []id3v2.CommentFrame{}
+		if ok {
+			for i, comm := range comments {
+				f := comm.(id3v2.CommentFrame)
+				desc, err1 := fixEncoding(f.Description)
+				text, err2 := fixEncoding(f.Text)
+				if err1 != nil || err2 != nil {
+					errorsCount += 1
+					log.Error().Msgf("Error converting comment %d: %s, %s", i, err1, err2)
+				} else {
+					newComm := id3v2.CommentFrame{
+						Text:        text,
+						Description: desc,
+						Encoding:    id3v2.EncodingUTF8,
+						Language:    f.Language,
+					}
+					fixedComments = append(fixedComments, newComm)
+				}
+			}
+			if len(fixedComments) > 0 {
+				tag.DeleteFrames(tag.CommonID("Comments"))
+				for _, c := range fixedComments {
+					tag.AddCommentFrame(c)
+				}
+			}
+		}
 	}
 
 	log.Info().Msgf("Fixed title: '%s', fixed artist: '%s', fixed album: '%s'", title, artist, album)
