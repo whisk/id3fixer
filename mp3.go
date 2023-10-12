@@ -1,8 +1,10 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/bogem/id3v2/v2"
 	"github.com/rs/zerolog/log"
@@ -11,7 +13,7 @@ import (
 func fixMp3(src, dst string, fixFrames map[string]string, forced bool) error {
 	log.Debug().Msgf("Fixing frames %v in file %s", fixFrames, src)
 	if len(fixFrames) == 0 {
-		return fmt.Errorf("Nothing to fix!")
+		return errors.New("nothing to fix")
 	}
 	// fail early
 	if ok, _ := fileExists(src); !ok {
@@ -20,7 +22,7 @@ func fixMp3(src, dst string, fixFrames map[string]string, forced bool) error {
 
 	tmpFile, err := os.CreateTemp("", "tmp*.mp3")
 	if err != nil {
-		return fmt.Errorf("Error creating temp file: %w", err)
+		return fmt.Errorf("failed creating temp file: %w", err)
 	}
 	tmpName := tmpFile.Name()
 	defer func() {
@@ -41,24 +43,25 @@ func fixMp3(src, dst string, fixFrames map[string]string, forced bool) error {
 			return fmt.Errorf("error accessing destination file: %w", err)
 		}
 		if dstExists {
-			return fmt.Errorf("destination file %s already exists\n", dst)
+			return fmt.Errorf("destination file %s already exists", dst)
 		}
 	}
 
 	err = copyFileContents(src, tmpName)
 	if err != nil {
-		return fmt.Errorf("Error copying to temp file: %w", err)
+		return fmt.Errorf("failed copying to temp file: %w", err)
 	}
 
 	tag, err := id3v2.Open(tmpName, id3v2.Options{Parse: true})
 	if err != nil {
-		return fmt.Errorf("Failed to read mp3 file: %w", err)
+		return fmt.Errorf("failed to read mp3 file: %w", err)
 	}
 	defer tag.Close()
 
 	tag.SetDefaultEncoding(id3v2.EncodingUTF8)
 
 	errorsCount := 0
+	fixesCount := 0
 
 	if _, ok := fixFrames["Comments"]; ok {
 		actualComments := tag.GetFrames(tag.CommonID("Comments"))
@@ -83,7 +86,8 @@ func fixMp3(src, dst string, fixFrames map[string]string, forced bool) error {
 				Encoding:    id3v2.EncodingUTF8,
 				Language:    f.Language,
 			}
-			log.Debug().Msgf("Comment#%d %s -> %s", i, f.Text, text)
+			log.Info().Msgf("Comment#%d %s -> %s", i, f.Text, text)
+			fixesCount += 1
 			fixedComments = append(fixedComments, newComm)
 		}
 		if len(fixedComments) > 0 {
@@ -107,7 +111,8 @@ func fixMp3(src, dst string, fixFrames map[string]string, forced bool) error {
 				errorsCount += 1
 				continue
 			}
-			log.Debug().Msgf("Frame %s#%d %s -> %s", id, i, f.Text, text)
+			log.Info().Msgf("Frame %s#%d %s -> %s", id, i, f.Text, text)
+			fixesCount += 1
 			newText := id3v2.TextFrame{
 				Text:     text,
 				Encoding: id3v2.EncodingUTF8,
@@ -124,7 +129,7 @@ func fixMp3(src, dst string, fixFrames map[string]string, forced bool) error {
 
 	if errorsCount > 0 {
 		if !forced {
-			return fmt.Errorf("Got %d error(s) while fixing encoding, aborting", errorsCount)
+			return fmt.Errorf("got %d error(s) while fixing encoding and aborted", errorsCount)
 		}
 		log.Error().Msgf("Got %d errors(s) while fixing encoding, proceeding", errorsCount)
 	}
@@ -132,25 +137,30 @@ func fixMp3(src, dst string, fixFrames map[string]string, forced bool) error {
 
 	err = tag.Save()
 	if err != nil {
-		return fmt.Errorf("Error saving temp file: %w", err)
+		return fmt.Errorf("failed saving temp file: %w", err)
 	}
 
-	if dst != "-" {
+	if dst != "" {
 		err = copyFileSafe(tmpName, dst)
 		if err != nil {
-			return fmt.Errorf("Error creating output file: %w", err)
+			return fmt.Errorf("failed creating output file: %w", err)
 		}
 	} else {
 		// fix in-place
-		err = copyFileContents(src, src+".bak") // always make backups!
+		backupFile := src + ".bak" + fmt.Sprint(time.Now().Unix())
+		if ok, _ := fileExists(backupFile); ok {
+			return errors.New("backup already exists")
+		}
+		err = copyFileContents(src, backupFile) // always make backups!
 		if err != nil {
-			return fmt.Errorf("Error creating a backup: %w", err)
+			return fmt.Errorf("failed creating a backup: %w", err)
 		}
 		err = copyFileContents(tmpName, src)
 		if err != nil {
-			return fmt.Errorf("Error fixing in-place: %w", err)
+			return fmt.Errorf("failed to fix in-place: %w", err)
 		}
 	}
+	log.Info().Msgf("Fixed %d frame(s)", fixesCount)
 
 	return nil
 }
