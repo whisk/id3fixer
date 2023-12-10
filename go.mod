@@ -3,13 +3,13 @@ module example/id3fixer
 go 1.19
 
 require (
-	github.com/bogem/id3v2/v2 v2.1.2
+	github.com/bogem/id3v2/v2 v2.1.4
 	github.com/rs/zerolog v1.28.0
-	golang.org/x/text v0.3.2
+	golang.org/x/text v0.3.8
 )
 
 require (
 	github.com/mattn/go-colorable v0.1.12 // indirect
 	github.com/mattn/go-isatty v0.0.14 // indirect
-	golang.org/x/sys v0.0.0-20210927094055-39ccf1dd6fa6 // indirect
+	golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f // indirect
 )
