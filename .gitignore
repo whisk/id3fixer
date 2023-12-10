@@ -1,2 +1,3 @@
 id3fixer
 *.mp3
+!sample-*.mp3
