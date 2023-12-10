@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -90,7 +91,9 @@ func main() {
 	} else {
 		zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	}
-	log.Logger = zerolog.New(zerolog.ConsoleWriter{Out: os.Stdout}).With().Timestamp().Logger()
+	consoleWriter := zerolog.NewConsoleWriter()
+	consoleWriter.TimeFormat = time.DateTime
+	log.Logger = zerolog.New(consoleWriter).With().Timestamp().Logger()
 
 	if options.listFrames {
 		fmt.Println("Suported frames:")

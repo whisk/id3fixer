@@ -1,6 +1,6 @@
 # id3fixer
 
-`id3fixer` is a command-line utility designed to correct the encoding issues found in CP1251 (also known as windows-1251 or Cyrillic) MP3 tags.
+`id3fixer` is a command-line utility designed to correct the encoding issues found in CP1251 (also known as windows-1251 or Cyrillic) MP3 tags. Currently only ID3v2.3 and ID3v2.4 are supported.
 
 ## Synopsis
 ```

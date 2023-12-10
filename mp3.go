@@ -65,6 +65,7 @@ func fixMp3(src, dst string, fixFrames map[string]string, forced bool) error {
 
 	if _, ok := fixFrames["Comments"]; ok {
 		actualComments := tag.GetFrames(tag.CommonID("Comments"))
+		log.Debug().Msgf("Found %d comment tag(s)", len(actualComments))
 		fixedComments := []id3v2.CommentFrame{}
 		for i, comm := range actualComments {
 			f := comm.(id3v2.CommentFrame)
@@ -102,6 +103,7 @@ func fixMp3(src, dst string, fixFrames map[string]string, forced bool) error {
 			continue
 		}
 		actualFrames := tag.GetFrames(id)
+		log.Debug().Msgf("Found %d %s tag(s)", len(actualFrames), id)
 		fixedFrames := []id3v2.TextFrame{}
 		for i, comm := range actualFrames {
 			f := comm.(id3v2.TextFrame)
