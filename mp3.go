@@ -105,18 +105,23 @@ func fixMp3(src, dst string, fixFrames map[string]string, forced bool) error {
 		actualFrames := tag.GetFrames(id)
 		log.Debug().Msgf("Found %d %s tag(s)", len(actualFrames), id)
 		fixedFrames := []id3v2.TextFrame{}
-		for i, comm := range actualFrames {
-			f := comm.(id3v2.TextFrame)
-			text, err := fixEncoding(f.Text)
+		for i, frame := range actualFrames {
+			oldText, err := getFrameText(frame)
 			if err != nil {
-				log.Error().Msgf("Error converting text frame %s#%d: %s", id, i, err)
+				log.Warn().Err(err).Msgf("Failed to read frame text %s#%d", id, i)
 				errorsCount += 1
 				continue
 			}
-			log.Info().Msgf("Frame %s#%d %s -> %s", id, i, f.Text, text)
+			fixedText, err := fixEncoding(oldText)
+			if err != nil {
+				log.Warn().Err(err).Msgf("Error converting text frame %s#%d", id, i)
+				errorsCount += 1
+				continue
+			}
+			log.Info().Msgf("Frame %s#%d %s -> %s", id, i, oldText, fixedText)
 			fixesCount += 1
 			newText := id3v2.TextFrame{
-				Text:     text,
+				Text:     fixedText,
 				Encoding: id3v2.EncodingUTF8,
 			}
 			fixedFrames = append(fixedFrames, newText)
@@ -149,7 +154,7 @@ func fixMp3(src, dst string, fixFrames map[string]string, forced bool) error {
 		}
 	} else {
 		// fix in-place
-		backupFile := src + ".bak" + fmt.Sprint(time.Now().Unix())
+		backupFile := src + "." + fmt.Sprint(time.Now().Unix()) + ".bak"
 		if ok, _ := fileExists(backupFile); ok {
 			return errors.New("backup already exists")
 		}
@@ -165,6 +170,17 @@ func fixMp3(src, dst string, fixFrames map[string]string, forced bool) error {
 	log.Info().Msgf("Fixed %d frame(s)", fixesCount)
 
 	return nil
+}
+
+func getFrameText(f id3v2.Framer) (string, error) {
+	switch v := f.(type) {
+	case id3v2.UserDefinedTextFrame:
+		return v.Value, nil
+	case id3v2.TextFrame:
+		return v.Text, nil
+	default:
+		return "", errors.New("failed to detect frame type")
+	}
 }
 
 func supportedMp3Frames() map[string]string {
