@@ -62,20 +62,20 @@ func fixMp3(src, dst string, fixFrames map[string]string, forced bool) error {
 		return fmt.Errorf("failed to read mp3 file: %w", err)
 	}
 	defer tag.Close()
+	tag.SetVersion(4)
 
-	tag.SetDefaultEncoding(id3v2.EncodingUTF8)
-
-	errorsCount := 0
-	fixesCount := 0
+	totalErrorsCount := 0
+	totalFixedCount := 0
 	for _, id := range fixFrames {
 		actualFrames := tag.GetFrames(id)
 		log.Debug().Msgf("Found %d %s tag(s)", len(actualFrames), id)
 		fixedFrames := []id3v2.Framer{}
+		fixesCount := 0
 		for i, frame := range actualFrames {
 			fixedFrame, fixes, err := fixFrame(frame)
 			if err != nil {
 				log.Warn().Err(err).Msgf("Failed to fix frame %s#%d, leaving it as is", id, i)
-				errorsCount += 1
+				totalErrorsCount += 1
 				fixedFrames = append(fixedFrames, frame)
 				continue
 			}
@@ -87,10 +87,15 @@ func fixMp3(src, dst string, fixFrames map[string]string, forced bool) error {
 			for field, change := range fixes {
 				log.Info().Msgf("Fixed frame %s#%d.%s: %s -> %s", id, i, field, change.Old, change.New)
 			}
+			totalFixedCount += 1
 			fixesCount += 1
 			fixedFrames = append(fixedFrames, fixedFrame)
 		}
-		if len(fixedFrames) > 0 {
+		if len(fixedFrames) != len(actualFrames) {
+			log.Fatal().Msgf("Number of fixed frames (%d) does not match actual frames count (%d). "+
+				"This is probably a bug!", len(fixedFrames), len(actualFrames))
+		}
+		if fixesCount > 0 {
 			tag.DeleteFrames(id)
 			for _, t := range fixedFrames {
 				tag.AddFrame(id, t)
@@ -98,11 +103,11 @@ func fixMp3(src, dst string, fixFrames map[string]string, forced bool) error {
 		}
 	}
 
-	if errorsCount > 0 {
+	if totalErrorsCount > 0 {
 		if !forced {
-			return fmt.Errorf("got %d error(s) while fixing encoding and aborted", errorsCount)
+			return fmt.Errorf("got %d error(s) while fixing encoding and aborted", totalErrorsCount)
 		}
-		log.Error().Msgf("Got %d errors(s) while fixing encoding, proceeding", errorsCount)
+		log.Error().Msgf("Got %d errors(s) while fixing encoding, proceeding", totalErrorsCount)
 	}
 	log.Debug().Msgf("Saving fixed file %s", dst)
 
@@ -131,7 +136,7 @@ func fixMp3(src, dst string, fixFrames map[string]string, forced bool) error {
 			return fmt.Errorf("failed to fix in-place: %w", err)
 		}
 	}
-	log.Info().Msgf("Fixed %d frame(s)", fixesCount)
+	log.Info().Msgf("Fixed %d frame(s)", totalFixedCount)
 
 	return nil
 }
