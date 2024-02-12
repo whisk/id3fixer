@@ -10,6 +10,11 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+type Change struct {
+	Old string
+	New string
+}
+
 func fixMp3(src, dst string, fixFrames map[string]string, forced bool) error {
 	log.Debug().Msgf("Fixing frames %v in file %s", fixFrames, src)
 	if len(fixFrames) == 0 {
@@ -62,69 +67,28 @@ func fixMp3(src, dst string, fixFrames map[string]string, forced bool) error {
 
 	errorsCount := 0
 	fixesCount := 0
-
-	if _, ok := fixFrames["Comments"]; ok {
-		actualComments := tag.GetFrames(tag.CommonID("Comments"))
-		log.Debug().Msgf("Found %d comment tag(s)", len(actualComments))
-		fixedComments := []id3v2.CommentFrame{}
-		for i, comm := range actualComments {
-			f := comm.(id3v2.CommentFrame)
-			desc, err := fixEncoding(f.Description)
-			if err != nil {
-				log.Error().Msgf("Error converting comment frame %d description: %s", i, err)
-				errorsCount += 1
-				continue
-			}
-			text, err := fixEncoding(f.Text)
-			if err != nil {
-				log.Error().Msgf("Error converting comment frame %d text: %s", i, err)
-				errorsCount += 1
-				continue
-			}
-			newComm := id3v2.CommentFrame{
-				Text:        text,
-				Description: desc,
-				Encoding:    id3v2.EncodingUTF8,
-				Language:    f.Language,
-			}
-			log.Info().Msgf("Comment#%d %s -> %s", i, f.Text, text)
-			fixesCount += 1
-			fixedComments = append(fixedComments, newComm)
-		}
-		if len(fixedComments) > 0 {
-			tag.DeleteFrames(tag.CommonID("Comments"))
-			for _, c := range fixedComments {
-				tag.AddCommentFrame(c)
-			}
-		}
-	}
 	for _, id := range fixFrames {
-		if id[0] != 'T' {
-			continue
-		}
 		actualFrames := tag.GetFrames(id)
 		log.Debug().Msgf("Found %d %s tag(s)", len(actualFrames), id)
-		fixedFrames := []id3v2.TextFrame{}
+		fixedFrames := []id3v2.Framer{}
 		for i, frame := range actualFrames {
-			oldText, err := getFrameText(frame)
+			fixedFrame, fixes, err := fixFrame(frame)
 			if err != nil {
-				log.Warn().Err(err).Msgf("Failed to read frame text %s#%d", id, i)
+				log.Warn().Err(err).Msgf("Failed to fix frame %s#%d, leaving it as is", id, i)
 				errorsCount += 1
+				fixedFrames = append(fixedFrames, frame)
 				continue
 			}
-			fixedText, err := fixEncoding(oldText)
-			if err != nil {
-				log.Warn().Err(err).Msgf("Error converting text frame %s#%d", id, i)
-				errorsCount += 1
+			if fixes == nil {
+				log.Debug().Msgf("Skipping zero difference fix for frame %s#%d", id, i)
+				fixedFrames = append(fixedFrames, frame)
 				continue
 			}
-			log.Info().Msgf("Frame %s#%d %s -> %s", id, i, oldText, fixedText)
+			for field, change := range fixes {
+				log.Info().Msgf("Fixed frame %s#%d.%s: %s -> %s", id, i, field, change.Old, change.New)
+			}
 			fixesCount += 1
-			newText := id3v2.TextFrame{
-				Text:     fixedText,
-				Encoding: id3v2.EncodingUTF8,
-			}
-			fixedFrames = append(fixedFrames, newText)
+			fixedFrames = append(fixedFrames, fixedFrame)
 		}
 		if len(fixedFrames) > 0 {
 			tag.DeleteFrames(id)
@@ -172,22 +136,65 @@ func fixMp3(src, dst string, fixFrames map[string]string, forced bool) error {
 	return nil
 }
 
-func getFrameText(f id3v2.Framer) (string, error) {
+func fixFrame(f id3v2.Framer) (id3v2.Framer, map[string]Change, error) {
 	switch v := f.(type) {
 	case id3v2.UserDefinedTextFrame:
-		return v.Value, nil
+		val, err := fixEncoding(v.Value)
+		if err != nil {
+			return nil, nil, err
+		}
+		if val == v.Value {
+			return nil, nil, nil
+		}
+		v.Value = val
+		v.Encoding = id3v2.EncodingUTF8
+		return v, map[string]Change{"Value": {v.Value, val}}, nil
+
 	case id3v2.TextFrame:
-		return v.Text, nil
+		text, err := fixEncoding(v.Text)
+		if err != nil {
+			return nil, nil, err
+		}
+		if text == v.Text {
+			return nil, nil, nil
+		}
+		v.Text = text
+		v.Encoding = id3v2.EncodingUTF8
+		return v, map[string]Change{"Text": {v.Text, text}}, nil
+
+	case id3v2.CommentFrame:
+		text, err := fixEncoding(v.Text)
+		if err != nil {
+			return nil, nil, err
+		}
+		desc, err := fixEncoding(v.Description)
+		if err != nil {
+			return nil, nil, err
+		}
+		if text == v.Text && desc == v.Description {
+			return nil, nil, nil
+		}
+		v.Text = text
+		v.Description = desc
+		v.Encoding = id3v2.EncodingUTF8
+		return v, map[string]Change{"Text": {v.Text, text}, "Description": {v.Description, desc}}, nil
+
 	default:
-		return "", errors.New("failed to detect frame type")
+		return nil, nil, errors.New("failed to detect frame type")
 	}
 }
 
 func supportedMp3Frames() map[string]string {
 	supportedFrames := make(map[string]string)
+	seenIds := make(map[string]bool)
 	for title, id := range id3v2.V23CommonIDs {
+		// skip duplicates
+		if _, ok := seenIds[id]; ok {
+			continue
+		}
 		if id == "COMM" || id[0] == 'T' {
 			supportedFrames[title] = id
+			seenIds[id] = true
 		}
 	}
 	return supportedFrames
