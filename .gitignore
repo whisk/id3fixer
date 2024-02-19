@@ -20,6 +20,7 @@ go.work
 
 # actual files we are fixing
 *.mp3
+!testdata/*.mp3
 
 # backups
 *.bak

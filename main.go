@@ -12,19 +12,6 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// TODO
-// + file copy
-// + temp file creation
-// + logging/debug levels
-// + cmdline options
-// + push to github
-// + modularity
-// + error wrapping/unwrapping
-// + fix in-place (with backups)
-// + support fixing comments
-// + write readme
-// - add golden test
-
 type framesMap map[string]string
 
 type optionsType struct {
@@ -122,7 +109,7 @@ func main() {
 func parseCmdlineOptions() optionsType {
 	options := optionsType{}
 	flag.StringVar(&options.src, "src", "", "source file name")
-	flag.StringVar(&options.dst, "dst", "", "destination file name. Default: fix in-place")
+	flag.StringVar(&options.dst, "dst", "", "destination file name. Default: empty (fix in-place)")
 	flag.Var(&options.frames, "frames", "comma-separated list of frames to fix")
 	flag.BoolVar(&options.listFrames, "l", false, "show a full list of supported frames")
 	flag.BoolVar(&options.forced, "f", true, "be forceful, do not abort on encoding errors")
