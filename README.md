@@ -4,7 +4,9 @@
 
 ## Synopsis
 ```
-Usage: id3fixer -src <source_file.mp3> [-dst <destination_file.mp3>]
+Usage:
+       id3fixer -src <source_file.mp3> [-dst <destination_file.mp3>]
+       id3fixer <source_file 1.mp3> [<source_file 2.mp3> ...]
 Arguments:
   -dst string
     	destination file name. Default: empty (fix in-place)
