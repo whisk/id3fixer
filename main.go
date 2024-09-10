@@ -13,6 +13,8 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+const Version = "0.1.0"
+
 type framesMap map[string]string
 
 type optionsType struct {
@@ -24,6 +26,7 @@ type optionsType struct {
 	forced     bool
 	verbose    bool
 	vverbose   bool
+	version    bool
 	help       bool
 }
 
@@ -90,10 +93,15 @@ func main() {
 			fmt.Printf("%s\t%s\n", id, title)
 		}
 		os.Exit(0)
+	} else if options.version {
+		fmt.Println(Version)
+		os.Exit(0)
 	} else if options.help || (options.src == "" && len(options.sources) == 0) || (len(options.sources) > 0 && options.dst != "") {
 		progname := filepath.Base(os.Args[0])
+		fmt.Printf("%s version %s\n", progname, Version)
 		fmt.Printf("Usage:\n")
 		fmt.Printf("       %s -src <source_file.mp3> [-dst <destination_file.mp3>]\n", progname)
+		fmt.Printf("or\n")
 		fmt.Printf("       %s <source_file 1.mp3> [<source_file 2.mp3> ...]\n", progname)
 		fmt.Println("Arguments:")
 		flag.PrintDefaults()
@@ -147,6 +155,7 @@ func parseCmdlineOptions() optionsType {
 	flag.BoolVar(&options.forced, "f", false, "be forceful, do not abort on encoding errors")
 	flag.BoolVar(&options.verbose, "v", false, "be verbose")
 	flag.BoolVar(&options.vverbose, "vv", false, "be very verbose (implies -v)")
+	flag.BoolVar(&options.version, "version", false, "show version information")
 	flag.BoolVar(&options.help, "h", false, "show help message")
 
 	flag.Parse()

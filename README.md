@@ -6,18 +6,21 @@
 ```
 Usage:
        id3fixer -src <source_file.mp3> [-dst <destination_file.mp3>]
+or
        id3fixer <source_file 1.mp3> [<source_file 2.mp3> ...]
 Arguments:
   -dst string
     	destination file name. Default: empty (fix in-place)
-  -f	be forceful, do not abort on encoding errors (default true)
+  -f	be forceful, do not abort on encoding errors
   -frames value
-    	comma-separated list of frames to fix (default TPOS,TOWN,TRCK,TPE1,COMM,TMED,TIT3,TPE2,TIT1,TRDA,TRSO,TIME,TPE4,TALB,TOLY,TCOP,TPE3,TSSE,TLEN,TORY,TSIZ,TBPM,TYER,TCOM,TENC,TDLY,TOPE,TXXX,TIT2,TEXT,TDAT,TOFN,TCON,TKEY,TRSN,TPUB,TSRC,TOAL,TLAN,TFLT)
+    	comma-separated list of frames to fix (default TIT1,TPE4,TPOS,TRSO,TPE1,TPE3,TSRC,TSSE,COMM,TIT2,TOWN,TOAL,TALB,TENC,TOFN,TXXX,TCOP,TOPE,TIT3,TCOM,TRCK,TLAN,TPUB,TDLY,TORY,TRSN,TKEY,TEXT,TOLY,TYER,TCON,TLEN,TFLT,TMED,TSIZ,TPE2,TIME,TDAT,TBPM,TRDA)
   -h	show help message
   -l	show a full list of supported frames
   -src string
     	source file name
   -v	be verbose
+  -version
+    	show version information
   -vv
     	be very verbose (implies -v)
 ```
