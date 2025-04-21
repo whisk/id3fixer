@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/bogem/id3v2/v2"
+	id3tag "github.com/frolovo22/tag"
 	"github.com/rs/zerolog/log"
 )
 
@@ -57,7 +58,123 @@ func fixMp3(src, dst string, fixFrames map[string]string, forced bool) error {
 		return fmt.Errorf("failed copying to temp file: %w", err)
 	}
 
-	tag, err := id3v2.Open(tmpName, id3v2.Options{Parse: true})
+	err = fixTags(tmpName, fixFrames, forced)
+	if err != nil {
+		return fmt.Errorf("failed fixing tags: %w", err)
+	}
+	log.Debug().Msgf("Saving fixed file %s", dst)
+
+	if dst != "" {
+		err = copyFileSafe(tmpName, dst)
+		if err != nil {
+			return fmt.Errorf("failed creating output file: %w", err)
+		}
+	} else {
+		// fix in-place
+		backupFile := src + "." + fmt.Sprint(time.Now().Unix()) + ".bak"
+		if ok, _ := fileExists(backupFile); ok {
+			return errors.New("backup already exists")
+		}
+		err = copyFileContents(src, backupFile) // always make backups!
+		if err != nil {
+			return fmt.Errorf("failed creating a backup: %w", err)
+		}
+		err = copyFileContents(tmpName, src)
+		if err != nil {
+			return fmt.Errorf("failed to fix in-place: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func fixTags(fileName string, fixFrames map[string]string, forced bool) error {
+	file, err := id3tag.ReadFile(fileName)
+	if err != nil {
+		return fmt.Errorf("failed to read id3 tags to detect the version: %w", err)
+	}
+	if file.GetVersion() == id3tag.VersionID3v1 {
+		return fixTagsV1(fileName, forced)
+	} else if file.GetVersion() == id3tag.VersionID3v23 || file.GetVersion() == id3tag.VersionID3v24 {
+		return fixTagsV23(fileName, fixFrames, forced)
+	}
+
+	return fmt.Errorf("unsupported id3 version" + file.GetVersion().String())
+}
+
+func fixTagsV1(fileName string, forced bool) error {
+	fh, err := os.Open(fileName)
+	if err != nil {
+		return fmt.Errorf("failed opening mp3 file for reading: %w", err)
+	}
+	defer fh.Close()
+	file, err := id3tag.ReadID3v1(fh)
+	if err != nil {
+		return fmt.Errorf("failed to read id3v1 tags: %w", err)
+	}
+	type id3v1TagAccessor struct {
+		Getter func() (string, error)
+		Setter func(string) error
+	}
+	fn := make(map[string]id3v1TagAccessor)
+	fn["Title"] = id3v1TagAccessor{Getter: file.GetTitle, Setter: file.SetTitle}
+	fn["Artist"] = id3v1TagAccessor{Getter: file.GetArtist, Setter: file.SetArtist}
+	fn["Album"] = id3v1TagAccessor{Getter: file.GetAlbum, Setter: file.SetAlbum}
+	fn["Comment"] = id3v1TagAccessor{Getter: file.GetComment, Setter: file.SetComment}
+	totalErrorsCount := 0
+	totalFixedCount := 0
+	for field, f := range fn {
+		log.Debug().Msgf("found tag %s", field)
+		val, err := f.Getter()
+		if err != nil {
+			log.Warn().Err(err).Msgf("Failed to read tag %s", field)
+			totalErrorsCount += 1
+			continue
+		}
+		if val == "" {
+			continue
+		}
+		fixedVal, err := fixEncodingCp1251(val, 30)
+		if err != nil {
+			log.Warn().Err(err).Msgf("Failed to fix tag %s", field)
+			totalErrorsCount += 1
+			continue
+		}
+		if fixedVal != val {
+			log.Info().Msgf("Fixed tag %s: %s -> %s", field, val, fixedVal)
+			totalFixedCount += 1
+			err = f.Setter(fixedVal)
+			if err != nil {
+				log.Warn().Err(err).Msgf("Failed to set tag %s", field)
+				totalErrorsCount += 1
+			}
+		}
+	}
+	if totalErrorsCount > 0 {
+		if !forced {
+			return fmt.Errorf("got %d error(s) while fixing encoding and aborted", totalErrorsCount)
+		}
+		log.Error().Msgf("Got %d errors(s) while fixing encoding, proceeding", totalErrorsCount)
+	}
+
+	fh.Close()
+	fh, err = os.OpenFile(fileName, os.O_RDWR, 0)
+	if err != nil {
+		return fmt.Errorf("failed opening mp3 file for writing: %w", err)
+	}
+	defer fh.Close()
+
+	err = file.Save(fh)
+	if err != nil {
+		return fmt.Errorf("failed to save id3v1 tags: %w", err)
+	}
+	log.Info().Msgf("Fixed %d tag(s)", totalFixedCount)
+
+	return nil
+}
+
+func fixTagsV23(fileName string, fixFrames map[string]string, forced bool) error {
+	tag, err := id3v2.Open(fileName, id3v2.Options{Parse: true})
 	if err != nil {
 		return fmt.Errorf("failed to read mp3 file: %w", err)
 	}
@@ -109,32 +226,10 @@ func fixMp3(src, dst string, fixFrames map[string]string, forced bool) error {
 		}
 		log.Error().Msgf("Got %d errors(s) while fixing encoding, proceeding", totalErrorsCount)
 	}
-	log.Debug().Msgf("Saving fixed file %s", dst)
 
 	err = tag.Save()
 	if err != nil {
 		return fmt.Errorf("failed saving temp file: %w", err)
-	}
-
-	if dst != "" {
-		err = copyFileSafe(tmpName, dst)
-		if err != nil {
-			return fmt.Errorf("failed creating output file: %w", err)
-		}
-	} else {
-		// fix in-place
-		backupFile := src + "." + fmt.Sprint(time.Now().Unix()) + ".bak"
-		if ok, _ := fileExists(backupFile); ok {
-			return errors.New("backup already exists")
-		}
-		err = copyFileContents(src, backupFile) // always make backups!
-		if err != nil {
-			return fmt.Errorf("failed creating a backup: %w", err)
-		}
-		err = copyFileContents(tmpName, src)
-		if err != nil {
-			return fmt.Errorf("failed to fix in-place: %w", err)
-		}
 	}
 	log.Info().Msgf("Fixed %d frame(s)", totalFixedCount)
 

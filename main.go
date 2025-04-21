@@ -13,7 +13,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-const Version = "0.1.1"
+const Version = "0.2.0"
 
 type framesMap map[string]string
 
