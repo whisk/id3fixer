@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/bogem/id3v2/v2"
-	id3tag "github.com/frolovo22/tag"
+	id3v1 "github.com/frolovo22/tag"
 	"github.com/rs/zerolog/log"
 )
 
@@ -18,9 +18,6 @@ type Change struct {
 
 func fixMp3(src, dst string, fixFrames map[string]string, forced bool) error {
 	log.Debug().Msgf("Fixing frames %v in file %s", fixFrames, src)
-	if len(fixFrames) == 0 {
-		return errors.New("nothing to fix")
-	}
 	// fail early
 	if ok, _ := fileExists(src); !ok {
 		return fmt.Errorf("%s does not exists", src)
@@ -89,13 +86,13 @@ func fixMp3(src, dst string, fixFrames map[string]string, forced bool) error {
 }
 
 func fixTags(fileName string, fixFrames map[string]string, forced bool) error {
-	file, err := id3tag.ReadFile(fileName)
+	file, err := id3v1.ReadFile(fileName)
 	if err != nil {
 		return fmt.Errorf("failed to read id3 tags to detect the version: %w", err)
 	}
-	if file.GetVersion() == id3tag.VersionID3v1 {
+	if file.GetVersion() == id3v1.VersionID3v1 {
 		return fixTagsV1(fileName, forced)
-	} else if file.GetVersion() == id3tag.VersionID3v23 || file.GetVersion() == id3tag.VersionID3v24 {
+	} else if file.GetVersion() == id3v1.VersionID3v23 || file.GetVersion() == id3v1.VersionID3v24 {
 		return fixTagsV23(fileName, fixFrames, forced)
 	}
 
@@ -108,7 +105,7 @@ func fixTagsV1(fileName string, forced bool) error {
 		return fmt.Errorf("failed opening mp3 file for reading: %w", err)
 	}
 	defer fh.Close()
-	file, err := id3tag.ReadID3v1(fh)
+	file, err := id3v1.ReadID3v1(fh)
 	if err != nil {
 		return fmt.Errorf("failed to read id3v1 tags: %w", err)
 	}
@@ -134,7 +131,7 @@ func fixTagsV1(fileName string, forced bool) error {
 		if val == "" {
 			continue
 		}
-		fixedVal, err := fixEncodingCp1251(val, 30)
+		fixedVal, err := cp1251ToTranslit(val, 30)
 		if err != nil {
 			log.Warn().Err(err).Msgf("Failed to fix tag %s", field)
 			totalErrorsCount += 1
@@ -174,6 +171,9 @@ func fixTagsV1(fileName string, forced bool) error {
 }
 
 func fixTagsV23(fileName string, fixFrames map[string]string, forced bool) error {
+	if len(fixFrames) == 0 {
+		return errors.New("no frames to fix given")
+	}
 	tag, err := id3v2.Open(fileName, id3v2.Options{Parse: true})
 	if err != nil {
 		return fmt.Errorf("failed to read mp3 file: %w", err)
@@ -189,7 +189,7 @@ func fixTagsV23(fileName string, fixFrames map[string]string, forced bool) error
 		fixedFrames := []id3v2.Framer{}
 		fixesCount := 0
 		for i, frame := range actualFrames {
-			fixedFrame, fixes, err := fixFrame(frame)
+			fixedFrame, fixes, err := fixV2Frame(frame)
 			if err != nil {
 				log.Warn().Err(err).Msgf("Failed to fix frame %s#%d, leaving it as is", id, i)
 				totalErrorsCount += 1
@@ -236,10 +236,10 @@ func fixTagsV23(fileName string, fixFrames map[string]string, forced bool) error
 	return nil
 }
 
-func fixFrame(f id3v2.Framer) (id3v2.Framer, map[string]Change, error) {
+func fixV2Frame(f id3v2.Framer) (id3v2.Framer, map[string]Change, error) {
 	switch v := f.(type) {
 	case id3v2.UserDefinedTextFrame:
-		val, err := fixEncoding(v.Value)
+		val, err := brokenCp1251ToUtf8(v.Value)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -251,7 +251,7 @@ func fixFrame(f id3v2.Framer) (id3v2.Framer, map[string]Change, error) {
 		return v, map[string]Change{"Value": {v.Value, val}}, nil
 
 	case id3v2.TextFrame:
-		text, err := fixEncoding(v.Text)
+		text, err := brokenCp1251ToUtf8(v.Text)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -263,11 +263,11 @@ func fixFrame(f id3v2.Framer) (id3v2.Framer, map[string]Change, error) {
 		return v, map[string]Change{"Text": {v.Text, text}}, nil
 
 	case id3v2.CommentFrame:
-		text, err := fixEncoding(v.Text)
+		text, err := brokenCp1251ToUtf8(v.Text)
 		if err != nil {
 			return nil, nil, err
 		}
-		desc, err := fixEncoding(v.Description)
+		desc, err := brokenCp1251ToUtf8(v.Description)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -284,7 +284,7 @@ func fixFrame(f id3v2.Framer) (id3v2.Framer, map[string]Change, error) {
 	}
 }
 
-func supportedMp3Frames() map[string]string {
+func supportedV2Frames() map[string]string {
 	supportedFrames := make(map[string]string)
 	seenIds := make(map[string]bool)
 	for title, id := range id3v2.V23CommonIDs {

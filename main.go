@@ -13,27 +13,27 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-const Version = "0.2.0"
+const Version = "0.2.1"
 
 type framesMap map[string]string
 
 type optionsType struct {
-	src        string
-	sources    []string
-	dst        string
-	frames     framesMap
-	listFrames bool
-	forced     bool
-	verbose    bool
-	vverbose   bool
-	version    bool
-	help       bool
+	src          string
+	sources      []string
+	dst          string
+	frames       framesMap
+	listV2Frames bool
+	forced       bool
+	verbose      bool
+	vverbose     bool
+	version      bool
+	help         bool
 }
 
 // sets frames to fix cmdline option
 func (f *framesMap) Set(value string) error {
 	rawFrames := strings.Split(value, ",")
-	supportedFrames := supportedMp3Frames()
+	supportedFrames := supportedV2Frames()
 	if len(rawFrames) == 0 || rawFrames[0] == "ALL" {
 		log.Debug().Msg("Fixing all supported frames")
 		*f = supportedFrames
@@ -64,7 +64,7 @@ func (f *framesMap) Set(value string) error {
 func (f *framesMap) String() string {
 	if len(*f) == 0 {
 		// we set default value here
-		*f = supportedMp3Frames()
+		*f = supportedV2Frames()
 	}
 	t := make([]string, 0, len(*f))
 	for _, id := range *f {
@@ -87,9 +87,9 @@ func main() {
 	consoleWriter.TimeFormat = time.DateTime
 	log.Logger = zerolog.New(consoleWriter).With().Timestamp().Logger()
 
-	if options.listFrames {
-		fmt.Println("Suported frames:")
-		for title, id := range supportedMp3Frames() {
+	if options.listV2Frames {
+		fmt.Println("Suported id3v2 frames:")
+		for title, id := range supportedV2Frames() {
 			fmt.Printf("%s\t%s\n", id, title)
 		}
 		os.Exit(0)
@@ -150,8 +150,8 @@ func parseCmdlineOptions() optionsType {
 	options := optionsType{}
 	flag.StringVar(&options.src, "src", "", "source file name")
 	flag.StringVar(&options.dst, "dst", "", "destination file name. Default: empty (fix in-place)")
-	flag.Var(&options.frames, "frames", "comma-separated list of frames to fix")
-	flag.BoolVar(&options.listFrames, "l", false, "show a full list of supported frames")
+	flag.Var(&options.frames, "frames", "comma-separated list of frames to fix (only for id3v2)")
+	flag.BoolVar(&options.listV2Frames, "l", false, "show a full list of supported id3v2 frames")
 	flag.BoolVar(&options.forced, "f", false, "be forceful, do not abort on encoding errors")
 	flag.BoolVar(&options.verbose, "v", false, "be verbose")
 	flag.BoolVar(&options.vverbose, "vv", false, "be very verbose (implies -v)")
